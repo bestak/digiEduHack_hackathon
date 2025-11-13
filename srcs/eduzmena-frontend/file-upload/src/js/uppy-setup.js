@@ -1,7 +1,7 @@
 // Uppy initialization and configuration
 
 import { config } from './config.js'
-import { notifyUploadSuccessXHR } from './upload-notification.js'
+import { notifyUploadSuccessXHR } from './metadata.js'
 import { getSelectedSchool, getSelectedRegion, getSelectedSchoolId, getSelectedRegionId } from './dropdowns.js'
 
 let uppyInstance = null
