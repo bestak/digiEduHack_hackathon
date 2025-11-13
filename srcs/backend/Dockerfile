@@ -12,6 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
+COPY ./app /app/src
 
-CMD ["python", "app.py"]
+CMD ["fastapi", "run", "src/main.py", "--port", "80"]
