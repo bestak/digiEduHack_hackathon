@@ -1,8 +1,8 @@
 // Uppy initialization and configuration
 
 import { config } from './config.js'
-import { notifyUploadSuccessXHR } from './metadata.js'
-import { getSelectedSchool, getSelectedRegion, getSelectedSchoolId, getSelectedRegionId } from './dropdowns.js'
+import { recordUploadMetadata } from './metadata.js'
+import { getSelectedSchoolId } from './dropdowns.js'
 
 let uppyInstance = null
 
@@ -167,25 +167,18 @@ async function handleSuccessfulUpload(file) {
     if (!file.uploadURL) return
 
     const schoolId = getSelectedSchoolId()
-    const regionId = getSelectedRegionId()
-    const selectedSchool = getSelectedSchool()
-    const selectedRegion = getSelectedRegion()
+    const fileId = file.uploadURL.replace(/\/$/, '').split('/').pop()
 
-    const notificationData = {
-        fileId: file.uploadURL.split('/').pop(),
+    const notifyResult = await recordUploadMetadata({
+        fileId,
         fileName: file.name,
-        uploadURL: file.uploadURL,
-        schoolId: schoolId || '',
-        regionId: regionId || '',
-        schoolInternalId: selectedSchool?.internalId || null,
-        regionInternalId: selectedRegion?.internalId || null
-    }
+        schoolId
+    })
 
-    const notifyResult = await notifyUploadSuccessXHR(notificationData)
     if (notifyResult.success) {
-        console.log('Upload notification sent successfully for:', file.name)
+        console.log('Upload metadata stored successfully for:', file.name)
     } else {
-        console.error('Failed to send upload notification for:', file.name, notifyResult.error)
+        console.error('Failed to store upload metadata for:', file.name, notifyResult.error)
     }
 }
 
@@ -217,4 +210,3 @@ window.updateUploadButtonState = updateUploadButtonState
 export function getUppyInstance() {
     return uppyInstance
 }
-

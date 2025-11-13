@@ -27,6 +27,7 @@ services:
     container_name: tusd-server
     restart: unless-stopped
     command:
+      - "-port=1080"
       - "-upload-dir=/data/uploads"
       - "-behind-proxy"
     volumes:

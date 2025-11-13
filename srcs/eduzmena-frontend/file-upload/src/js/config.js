@@ -1,7 +1,19 @@
 // Application configuration
 
+const DEFAULT_API_BASE_URL = window.__APP_CONFIG?.apiBaseUrl || 'http://localhost:8000'
+const DEFAULT_TUS_ENDPOINT = window.__APP_CONFIG?.tusEndpoint || 'http://localhost:1080/files/'
+
+function ensureNoTrailingSlash(url) {
+    return url.endsWith('/') ? url.slice(0, -1) : url
+}
+
+function ensureTrailingSlash(url) {
+    return url.endsWith('/') ? url : `${url}/`
+}
+
 export const config = {
-    tusEndpoint: 'http://127.0.0.1:1080/files/',
+    apiBaseUrl: ensureNoTrailingSlash(DEFAULT_API_BASE_URL),
+    tusEndpoint: ensureTrailingSlash(DEFAULT_TUS_ENDPOINT),
     retryDelays: [0, 1000, 3000, 5000],
     chunkSize: 5 * 1024 * 1024, // 5MB
     resume: true,
@@ -9,8 +21,3 @@ export const config = {
     maxFileSize: null, // null = unlimited
     allowedFileTypes: null // null = all types
 }
-
-// Storage keys
-export const STORAGE_KEY_REGIONS = 'admin_regions'
-export const STORAGE_KEY_SCHOOLS = 'admin_schools'
-

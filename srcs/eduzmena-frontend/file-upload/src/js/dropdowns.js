@@ -4,28 +4,44 @@ import { loadRegions, loadSchools } from './storage.js'
 
 let regions = []
 let schools = []
+let filtersInitialized = false
+
+async function fetchDropdownData() {
+    const [regionsData, schoolsData] = await Promise.all([loadRegions(), loadSchools()])
+    regions = Array.isArray(regionsData) ? regionsData : []
+    schools = Array.isArray(schoolsData) ? schoolsData : []
+}
 
 /**
  * Initialize dropdowns with current data
  */
-export function initializeDropdowns() {
-    regions = loadRegions()
-    schools = loadSchools()
+export async function initializeDropdowns() {
+    await fetchDropdownData()
     populateRegions()
     populateSchools()
-    setupRegionFilter()
+    if (!filtersInitialized) {
+        setupRegionFilter()
+        filtersInitialized = true
+    }
 }
 
 /**
- * Refresh dropdowns with latest data from storage
+ * Refresh dropdowns with latest data from backend or provided payload
  */
-export function refreshDropdowns() {
-    regions = loadRegions()
-    schools = loadSchools()
-    const currentRegion = document.getElementById('region')?.value || ''
+export async function refreshDropdowns(nextData = null) {
+    if (nextData) {
+        regions = Array.isArray(nextData.regions) ? nextData.regions : regions
+        schools = Array.isArray(nextData.schools) ? nextData.schools : schools
+    } else {
+        await fetchDropdownData()
+    }
+
+    const regionSelect = document.getElementById('region')
+    const currentRegion = regionSelect?.value || ''
+
     populateRegions()
-    if (currentRegion) {
-        document.getElementById('region').value = currentRegion
+    if (regionSelect && currentRegion) {
+        regionSelect.value = currentRegion
     }
     populateSchools(currentRegion || null)
 }
@@ -75,7 +91,7 @@ function populateSchools(regionId = null) {
     schoolSelect.innerHTML = '<option value="">Select a school</option>'
 
     const filteredSchools = regionId
-        ? schools.filter(s => s.regionId === regionId)
+        ? schools.filter(s => String(s.region_id) === String(regionId))
         : schools
 
     filteredSchools.forEach(school => {
@@ -86,7 +102,10 @@ function populateSchools(regionId = null) {
     })
 
     // Restore selection if it's still valid
-    if (currentSchoolId && filteredSchools.some(s => s.id === currentSchoolId)) {
+    if (
+        currentSchoolId &&
+        filteredSchools.some(s => String(s.id) === String(currentSchoolId))
+    ) {
         schoolSelect.value = currentSchoolId
     }
 }
@@ -111,8 +130,8 @@ function setupRegionFilter() {
             // If current school is not in the selected region, clear it
             const currentSchoolId = schoolSelect.value
             if (currentSchoolId) {
-                const currentSchool = schools.find(s => s.id === currentSchoolId)
-                if (currentSchool && currentSchool.regionId !== selectedRegionId) {
+                const currentSchool = schools.find(s => String(s.id) === String(currentSchoolId))
+                if (currentSchool && String(currentSchool.region_id) !== String(selectedRegionId)) {
                     schoolSelect.value = ''
                 }
             }
@@ -133,14 +152,14 @@ function setupRegionFilter() {
 
         if (selectedSchoolId) {
             // Find the school and its region
-            const selectedSchool = schools.find(s => s.id === selectedSchoolId)
+            const selectedSchool = schools.find(s => String(s.id) === String(selectedSchoolId))
 
-            if (selectedSchool && selectedSchool.regionId) {
+            if (selectedSchool && selectedSchool.region_id) {
                 // Set the region dropdown to match the school's region
-                regionSelect.value = selectedSchool.regionId
+                regionSelect.value = selectedSchool.region_id
 
                 // Filter schools to show only schools in that region
-                populateSchools(selectedSchool.regionId)
+                populateSchools(selectedSchool.region_id)
 
                 // Restore the school selection
                 schoolSelect.value = selectedSchoolId
@@ -182,7 +201,7 @@ export function getSelectedRegionId() {
  */
 export function getSelectedSchool() {
     const schoolId = getSelectedSchoolId()
-    return schools.find(s => s.id === schoolId) || null
+    return schools.find(s => String(s.id) === String(schoolId)) || null
 }
 
 /**
@@ -191,6 +210,5 @@ export function getSelectedSchool() {
  */
 export function getSelectedRegion() {
     const regionId = getSelectedRegionId()
-    return regions.find(r => r.id === regionId) || null
+    return regions.find(r => String(r.id) === String(regionId)) || null
 }
-
