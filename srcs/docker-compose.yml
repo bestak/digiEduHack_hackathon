@@ -1,0 +1,37 @@
+services:
+  ollama:
+    image: ollama/ollama:0.3.12
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-5m}
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./chat/docker-entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    # Uncomment to request all GPUs on Linux with the NVIDIA Container Toolkit installed.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      - ollama
+    ports:
+      - "8000:80"
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:1.5b}
+      - BACKEND_TEST_PROMPT=${BACKEND_TEST_PROMPT:-Say hi from the backend container}
+
+volumes:
+  ollama_data:
+    driver: local
