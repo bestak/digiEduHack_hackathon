@@ -49,7 +49,8 @@ services:
     environment:
       # LLM config
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:1.5b}
+      # - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:1.5b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
       - BACKEND_TEST_PROMPT=${BACKEND_TEST_PROMPT:-Say hi from the backend container}
 
       # DB lives in shared /data volume
@@ -71,6 +72,22 @@ services:
       - PORT=4173
     ports:
       - "4173:4173"
+
+  worker:
+    build:
+      context: ./backend
+    depends_on:
+      - ollama
+      - tusd
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      # - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:1.5b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
+      - DATABASE_URL=sqlite:////data/app.db
+    volumes:
+      - ./data:/data
+    command: ["python", "-m", "app.worker"]
 
 volumes:
   ollama_data:
