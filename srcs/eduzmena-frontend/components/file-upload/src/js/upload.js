@@ -9,13 +9,18 @@ import { initializeUppy, updateUploadButtonState } from './uppy-setup.js'
 async function init() {
     try {
         // Initialize dropdowns
-        initializeDropdowns()
+        await initializeDropdowns()
 
         // Watch for storage changes and refresh dropdowns when data updates
-        watchStorageChanges(() => {
-            refreshDropdowns()
-            // Update upload button state after refresh
-            setTimeout(() => updateUploadButtonState(), 100)
+        watchStorageChanges((payload) => {
+            refreshDropdowns(payload)
+                .then(() => {
+                    // Update upload button state after refresh
+                    setTimeout(() => updateUploadButtonState(), 100)
+                })
+                .catch((error) => {
+                    console.error('Failed to refresh dropdowns:', error)
+                })
         })
 
         // Initialize Uppy
