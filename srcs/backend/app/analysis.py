@@ -37,20 +37,44 @@ def compute_basic_stats(text: str) -> Dict[str, Any]:
     }
 
 def build_llm_prompt(text: str) -> str:
-    # Truncate huge docs for now; later you can do chunking
     MAX_CHARS = 8000
     sample = text[:MAX_CHARS]
 
     return f"""
-You are a teacher-assistant analyzing educational documents.
+You are a backend service analyzing educational documents (often Czech school reports).
 
-Given the following document content, extract structured information and return **ONLY valid JSON** with keys:
-- "summary": short summary of the document
-- "topics": list of main topics (strings)
-- "grade_level": approximate grade level (e.g. "1–5", "6–9", "high school", "university")
-- "difficulty": "easy" | "medium" | "hard"
-- "estimated_time_minutes": integer, how long it would take a student to read/study it
-- "key_concepts": list of important concepts or skills
+Your goal is to transform each document into a single, rich JSON object that captures as much machine-readable information as possible for later dashboards and analytics.
+
+Rules:
+- Return ONLY ONE JSON OBJECT and nothing else.
+- Do not include backticks.
+- Do not include explanations before or after the JSON.
+- Do not include multiple JSON objects.
+- Prefer short, machine-friendly keys in English using snake_case
+  (e.g. "student_name", "school_year", "math_grade", "attendance_percentage").
+- Preserve original Czech text in values where appropriate (teacher comments, subject names, etc.).
+- Use numbers for anything that looks numeric (grades, counts, percentages, points, years, hours, etc.).
+- If you are unsure about a value, either omit the field or add a boolean flag like "<field>_uncertain": true.
+
+Required structure:
+- The top-level JSON MUST contain:
+  - "summary": short natural-language summary of the document (2–4 sentences).
+  - "data": an object that groups all other extracted fields.
+
+Inside "data":
+- You are free to create any keys and nested objects that best represent the information in the document.
+- Group related fields into nested objects (for example: "student", "school", "class", "grades", "behavior", "attendance", "evaluation", "meta").
+- Use arrays when there are repeated elements (for example: list of subjects, list of semesters/terms, list of teacher comments).
+- For arrays, each item should be an object with consistent fields
+  (for example: subjects might have "name", "area", "grade", "comment", "is_core_subject").
+
+Focus on extracting:
+- All explicit identifiers (student name, school, class, academic year, term, document type).
+- All explicit or implicit metrics (grades, points, percentages, rankings, levels, counts of absences, etc.).
+- Any temporal information (dates, school year, term/semester, period).
+- Any categorical labels (subject names, behavior categories, assessment labels, pass/fail, etc.).
+- Any free-text comments or evaluations from teachers.
+- Any information about performance trends, strengths, weaknesses, recommendations.
 
 Document content (possibly truncated):
 
@@ -67,6 +91,7 @@ def analyze_file(session: Session, file_meta: FileMeta) -> None:
     basic_stats = compute_basic_stats(text)
 
     prompt = build_llm_prompt(text)
+    # print(f"PROMPT: {prompt}")
     llm_json = ask_llm(prompt)
 
     file_meta.extracted_text = text  # optional, maybe store only if small

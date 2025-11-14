@@ -10,12 +10,29 @@ def ask_llm(prompt: str):
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": prompt,
-        # If supported, ask for JSON output:
-        "format": "json"
+        "format": "json",  # Llama 3.1 supports this
+        "stream": False,
     }
-    r = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload, timeout=120)
+    
+    r = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload, timeout=300)
     r.raise_for_status()
     data = r.json()
-    # depending on the model, the text may be in `data["response"]`
     raw = data.get("response", "")
-    return json.loads(raw)
+
+    raw = raw.strip()
+
+    # Parse only the first JSON object, ignore trailing junk
+    try:
+        decoder = json.JSONDecoder()
+        obj, idx = decoder.raw_decode(raw)
+        # optional: if you want to see if there's trailing stuff:
+        leftover = raw[idx:].strip()
+        if leftover:
+            print("NOTE: LLM returned extra trailing content after JSON, ignoring it.")
+            print("TRAILING (truncated):", leftover[:200])
+        return obj
+    except json.JSONDecodeError as e:
+        # make debugging easier
+        print("!!! JSON DECODE ERROR !!!", e)
+        print("RAW (truncated):", raw[:400])
+        raise
