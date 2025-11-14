@@ -34,7 +34,7 @@ def create_file(
     session.refresh(file_meta)
 
     rag = RAG()
-    rag.add_document(f"/data/uploads/{payload.tus_id}")
+    rag.add_document(f"/data/uploads/{payload.tus_id}", payload.filename)
 
     return file_meta
 

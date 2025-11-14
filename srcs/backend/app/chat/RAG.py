@@ -35,8 +35,9 @@ class RAG:
         )
         print(f"Current documents in ChromaDb: # {self.vector_store._collection.count()}")
 
-    def load_any_document(self, path: str):
-        ext = Path(path).suffix.lower()
+    def load_any_document(self, path: str, filename: str):
+        ext = Path(filename).suffix.lower()
+        print(f"Loading {ext} from {path}")
 
         loader_map = {
             ".pdf": UnstructuredPDFLoader,
@@ -55,12 +56,14 @@ class RAG:
         loader = loader_cls(path)
         return loader.load()
 
-    def add_document(self, path: str):
+    def add_document(self, path: str, filename: str):
         print(f"Adding document: {path}")
-        docs = self.load_any_document(path)
+        docs = self.load_any_document(path, filename)
         if docs is None:
+            print("Error, not supported file type")
             return None
         assert len(docs) == 1
+        print(docs[0].metadata)
         print(f"Total characters: {len(docs[0].page_content)}")
 
         text_splitter = RecursiveCharacterTextSplitter(
