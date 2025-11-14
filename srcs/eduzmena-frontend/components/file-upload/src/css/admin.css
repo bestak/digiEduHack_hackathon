@@ -102,3 +102,12 @@
         grid-template-columns: 1fr;
     }
 }
+
+.file-json-preview {
+    white-space: pre-wrap;   /* Wrap long lines */
+    word-break: break-word;  /* Break long words when needed */
+    overflow-x: auto;        /* (Optional) still allow scrolling if needed */
+    font-family: monospace;
+    font-size: 13px;
+    padding: 8px;
+}

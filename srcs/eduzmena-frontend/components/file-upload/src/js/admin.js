@@ -1,9 +1,10 @@
 // Admin panel logic backed by the real API
 
-import { regionsApi, schoolsApi } from './api.js'
+import { regionsApi, schoolsApi, filesApi } from './api.js'
 
 let regions = []
 let schools = []
+let files = []
 
 function showAlert(message, type = 'success') {
     const alertContainer = document.getElementById('alert-container')
@@ -20,19 +21,36 @@ function showAlert(message, type = 'success') {
 
 async function loadData() {
     try {
-        const [regionData, schoolData] = await Promise.all([
+        const [regionData, schoolData, fileData] = await Promise.all([
             regionsApi.list(),
-            schoolsApi.list()
+            schoolsApi.list(),
+            filesApi.list(),
         ])
+
         regions = regionData
         schools = schoolData
+        files = fileData
+
         renderRegions()
         renderSchools()
         renderRegionSelect()
+        renderFiles()
     } catch (error) {
         console.error('Failed to load admin data:', error)
         showAlert('Unable to load data from backend. Check console for details.', 'error')
     }
+}
+
+function formatDateTime(iso) {
+    if (!iso) return '–'
+    const d = new Date(iso)
+    return d.toLocaleString('cs-CZ', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
 }
 
 function renderRegions() {
@@ -72,7 +90,9 @@ function renderSchools() {
             <div class="list-item">
                 <div class="list-item-info">
                     <div class="list-item-name">${school.name}</div>
-                    <div class="list-item-meta">Region: ${region ? region.name : 'Unknown'} | ID: ${school.id}</div>
+                    <div class="list-item-meta">
+                        Region: ${region ? region.name : 'Unknown'} | ID: ${school.id}
+                    </div>
                 </div>
                 <div class="list-item-actions">
                     <button class="btn btn-danger" onclick="deleteSchool('${school.id}')">Delete</button>
@@ -92,6 +112,80 @@ function renderRegionSelect() {
         option.textContent = region.name
         select.appendChild(option)
     })
+}
+
+function renderFiles() {
+    const container = document.getElementById('files-list')
+    if (!container) return
+
+    if (!files.length) {
+        container.innerHTML = '<div class="empty-state">No files uploaded yet</div>'
+        return
+    }
+
+    container.innerHTML = files.map(file => {
+        const school = schools.find(s => s.id === file.school_id)
+        const region = school ? regions.find(r => r.id === school.region_id) : null
+
+        const uploadedAt = formatDateTime(file.uploaded_at)
+        const analysisStartedAt = formatDateTime(file.analysis_started_at)
+        const analysisFinishedAt = formatDateTime(file.analysis_finished_at)
+        const status = file.analysis_status || 'pending'
+
+        const statusBadgeClass = {
+            pending: 'badge-secondary',
+            processing: 'badge-info',
+            done: 'badge-success',
+            failed: 'badge-danger',
+        }[status] || 'badge-secondary'
+
+        // Optional: compact preview of basic_stats and llm_summary
+        const basicStatsPreview = file.basic_stats
+            ? `<pre class="file-json-preview">${JSON.stringify(file.basic_stats, null, 2)}</pre>`
+            : '<span class="text-muted">No basic stats</span>'
+
+        const llmSummaryPreview = file.llm_summary
+            ? `<pre class="file-json-preview">${JSON.stringify(file.llm_summary, null, 2)}</pre>`
+            : '<span class="text-muted">No LLM summary</span>'
+
+        return `
+            <div class="list-item">
+                <div class="list-item-info">
+                    <div class="list-item-name">
+                        ${file.filename}
+                        <span class="badge ${statusBadgeClass}" style="margin-left: 8px;">
+                            ${status}
+                        </span>
+                    </div>
+                    <div class="list-item-meta">
+                        File ID: ${file.id ?? '–'} | TUS ID: ${file.tus_id}
+                    </div>
+                    <div class="list-item-meta">
+                        School: ${school ? school.name : 'Unknown'}${region ? ` (Region: ${region.name})` : ''} |
+                        School ID: ${file.school_id}
+                    </div>
+                    <div class="list-item-meta">
+                        Uploaded at: ${uploadedAt} |
+                        Analysis started: ${analysisStartedAt} |
+                        Analysis finished: ${analysisFinishedAt}
+                    </div>
+                    ${
+                        file.analysis_error
+                            ? `<div class="list-item-meta text-danger">Error: ${file.analysis_error}</div>`
+                            : ''
+                    }
+                    <details class="file-details">
+                        <summary>Basic stats</summary>
+                        ${basicStatsPreview}
+                    </details>
+                    <details class="file-details">
+                        <summary>LLM summary</summary>
+                        ${llmSummaryPreview}
+                    </details>
+                </div>
+            </div>
+        `
+    }).join('')
 }
 
 async function addRegion(name) {
