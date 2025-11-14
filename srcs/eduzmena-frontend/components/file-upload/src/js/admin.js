@@ -273,6 +273,7 @@ function setupForms() {
 
 window.deleteRegion = deleteRegion
 window.deleteSchool = deleteSchool
+window.refreshFiles = () => loadData()
 
 async function init() {
     setupForms()
