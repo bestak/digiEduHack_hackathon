@@ -126,10 +126,18 @@ function renderRegions() {
 
 function renderSchools() {
     const container = document.getElementById('schools-list')
-    const schoolsToRender = schools
+    if (!container) return
+
+    const regionFilter = document.getElementById('schools-region-filter')?.value || ''
+    const schoolsToRender = regionFilter
+        ? schools.filter(s => String(s.region_id) === regionFilter)
+        : schools
 
     if (!schoolsToRender.length) {
-        container.innerHTML = '<div class="empty-state">No schools created yet</div>'
+        const emptyMessage = regionFilter
+            ? 'No schools found for the selected region'
+            : 'No schools created yet'
+        container.innerHTML = `<div class="empty-state">${emptyMessage}</div>`
         return
     }
 
@@ -154,7 +162,8 @@ function renderSchools() {
 function renderRegionSelects() {
     const configs = [
         { id: 'school-region', placeholder: 'Select a region' },
-        { id: 'files-region-filter', placeholder: 'All regions' }
+        { id: 'files-region-filter', placeholder: 'All regions' },
+        { id: 'schools-region-filter', placeholder: 'All regions' }
     ]
 
     configs.forEach(({ id, placeholder }) => {
@@ -615,6 +624,7 @@ async function deleteSchool(id) {
 function setupForms() {
     const regionForm = document.getElementById('region-form')
     const schoolForm = document.getElementById('school-form')
+    const schoolsRegionFilter = document.getElementById('schools-region-filter')
     const filesRegionFilter = document.getElementById('files-region-filter')
     const filesSchoolFilter = document.getElementById('files-school-filter')
     const filesDocTypeFilter = document.getElementById('files-doc-type-filter')
@@ -629,6 +639,9 @@ function setupForms() {
         if (!name) return
         await addRegion(name)
         nameInput.value = ''
+    })
+    schoolsRegionFilter?.addEventListener('change', () => {
+        renderSchools()
     })
 
     schoolForm?.addEventListener('submit', async (e) => {
