@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain.tools import tool
 
-from chat.prompts import agent_system_prompt
+from .prompts import agent_system_prompt
 
 @dataclass
 class ModelResponse:
