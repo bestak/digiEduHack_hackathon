@@ -66,6 +66,20 @@
                     <h2 style="margin: 0;">Uploaded Files</h2>
                     <button onclick="refreshFiles()" class="btn btn-secondary">Refresh</button>
                 </div>
+                <div class="form-group" style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div style="flex: 1; min-width: 220px;">
+                        <label for="files-region-filter">Filter by region</label>
+                        <select id="files-region-filter">
+                            <option value="">All regions</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1; min-width: 220px;">
+                        <label for="files-school-filter">Filter by school</label>
+                        <select id="files-school-filter">
+                            <option value="">All schools</option>
+                        </select>
+                    </div>
+                </div>
                 <div id="files-list"></div>
             </div>
         </div>
