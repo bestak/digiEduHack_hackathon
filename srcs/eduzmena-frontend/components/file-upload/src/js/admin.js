@@ -4,6 +4,34 @@ import { regionsApi, schoolsApi, filesApi } from './api.js'
 import { config } from './config.js'
 
 const DEFAULT_FILES_PAGE_SIZE = 10
+const UNKNOWN_DOCUMENT_TYPE_VALUE = '__unknown__'
+
+const FILE_FORMAT_DEFINITIONS = [
+    {
+        value: 'text',
+        label: 'Text document',
+        icon: '📄',
+        extensions: ['.txt', '.md', '.rtf', '.doc', '.docx', '.pdf']
+    },
+    {
+        value: 'table',
+        label: 'Table / Spreadsheet',
+        icon: '📊',
+        extensions: ['.csv', '.tsv', '.xls', '.xlsx', '.ods']
+    },
+    {
+        value: 'audio',
+        label: 'Audio',
+        icon: '🎧',
+        extensions: ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg']
+    }
+]
+
+const DEFAULT_FILE_FORMAT = {
+    value: 'text',
+    label: 'Text document',
+    icon: '📄'
+}
 
 let regions = []
 let schools = []
@@ -51,6 +79,8 @@ async function loadData() {
         renderRegions()
         renderRegionSelects()
         renderSchoolFilterSelect()
+        renderDocumentTypeFilterSelect()
+        renderFileFormatFilterSelect()
         renderSchools()
         renderFiles()
     } catch (error) {
@@ -176,12 +206,131 @@ function renderSchoolFilterSelect() {
     select.value = optionExists ? prevValue : ''
 }
 
+function renderDocumentTypeFilterSelect() {
+    const select = document.getElementById('files-doc-type-filter')
+    if (!select) return
+
+    const prevValue = select.value
+    select.innerHTML = '<option value="">All document types</option>'
+
+    const typeMap = new Map()
+    files.forEach(file => {
+        const { type, label, icon } = getDocumentTypeInfo(file)
+        const value = type ?? UNKNOWN_DOCUMENT_TYPE_VALUE
+        if (!typeMap.has(value)) {
+            typeMap.set(value, {
+                label: label || 'Unknown document type',
+                icon: icon || ''
+            })
+        }
+    })
+
+    const sortedTypes = Array
+        .from(typeMap.entries())
+        .sort((a, b) => a[1].label.localeCompare(b[1].label))
+
+    sortedTypes.forEach(([value, info]) => {
+        const option = document.createElement('option')
+        option.value = value
+        const text = info.icon ? `${info.icon} ${info.label}` : info.label
+        option.textContent = text
+        select.appendChild(option)
+    })
+
+    const optionExists = sortedTypes.some(([value]) => value === prevValue)
+    select.value = optionExists ? prevValue : ''
+}
+
+function getFileFormatInfo(file) {
+    const filename = (file?.filename || '').toLowerCase()
+    const dotIndex = filename.lastIndexOf('.')
+    const extension = dotIndex >= 0 ? filename.slice(dotIndex) : ''
+
+    const match = FILE_FORMAT_DEFINITIONS.find(def =>
+        def.extensions.includes(extension)
+    )
+
+    if (match) {
+        return match
+    }
+
+    if (!extension && file?.transcript_text) {
+        const audioFormat = FILE_FORMAT_DEFINITIONS.find(def => def.value === 'audio')
+        if (audioFormat) {
+            return audioFormat
+        }
+    }
+
+    return DEFAULT_FILE_FORMAT
+}
+
+function getDocumentTypeInfo(file) {
+    const raw = file.llm_summary
+    if (!raw) {
+        return { type: null, icon: '📄', label: 'Unknown document type' }
+    }
+
+    let obj = raw
+    if (typeof raw === 'string') {
+        try {
+            obj = JSON.parse(raw)
+        } catch (e) {
+            return { type: null, icon: '📄', label: 'Unknown document type' }
+        }
+    }
+
+    const detectedType = obj?.data?.type || obj?.type || null
+
+    switch (detectedType) {
+        case 'attendance_checklist':
+            return { type: detectedType, icon: '📋', label: 'Attendance checklist' }
+        case 'feedback_form':
+            return { type: detectedType, icon: '📝', label: 'Feedback form' }
+        case 'record':
+            return { type: detectedType, icon: '📄', label: 'Record' }
+        default:
+            return { type: detectedType, icon: '❔', label: 'Unknown document type' }
+    }
+}
+
+function renderFileFormatFilterSelect() {
+    const select = document.getElementById('files-format-filter')
+    if (!select) return
+
+    const prevValue = select.value
+    select.innerHTML = '<option value="">All formats</option>'
+
+    const formatMap = new Map()
+    files.forEach(file => {
+        const { value, label, icon } = getFileFormatInfo(file)
+        if (!formatMap.has(value)) {
+            formatMap.set(value, { label, icon })
+        }
+    })
+
+    const sortedFormats = Array
+        .from(formatMap.entries())
+        .sort((a, b) => a[1].label.localeCompare(b[1].label))
+
+    sortedFormats.forEach(([value, info]) => {
+        const option = document.createElement('option')
+        option.value = value
+        option.textContent = info.icon ? `${info.icon} ${info.label}` : info.label
+        select.appendChild(option)
+    })
+
+    const optionExists = formatMap.has(prevValue)
+    select.value = optionExists ? prevValue : ''
+}
+
 function renderFiles() {
     const container = document.getElementById('files-list')
     if (!container) return
 
     const regionFilter = document.getElementById('files-region-filter')?.value || ''
     const schoolFilter = document.getElementById('files-school-filter')?.value || ''
+    const docTypeFilter = document.getElementById('files-doc-type-filter')?.value || ''
+    const formatFilter = document.getElementById('files-format-filter')?.value || ''
 
     const filteredFiles = files.filter(file => {
         const school = schools.find(s => s.id === file.school_id)
@@ -191,7 +340,16 @@ function renderFiles() {
         const matchesSchool = schoolFilter
             ? String(file.school_id) === schoolFilter
             : true
-        return matchesRegion && matchesSchool
+        const { type } = getDocumentTypeInfo(file)
+        const docTypeValue = type ?? UNKNOWN_DOCUMENT_TYPE_VALUE
+        const matchesDocType = docTypeFilter
+            ? docTypeValue === docTypeFilter
+            : true
+        const fileFormat = getFileFormatInfo(file)
+        const matchesFormat = formatFilter
+            ? fileFormat.value === formatFilter
+            : true
+        return matchesRegion && matchesSchool && matchesDocType && matchesFormat
     })
 
     if (!filteredFiles.length) {
@@ -236,6 +394,11 @@ function renderFiles() {
             failed: 'badge-danger',
         }[status] || 'badge-secondary'
 
+        const { type: docType, icon: docIcon, label: docLabel } = getDocumentTypeInfo(file)
+        const docTypeLabel = docType ? `${docLabel} (${docType})` : docLabel
+        const { label: formatLabel, icon: formatIcon } = getFileFormatInfo(file)
+        const formatDisplay = formatIcon ? `${formatIcon} ${formatLabel}` : formatLabel
+
         const basicStatsPreview = file.basic_stats
             ? `<pre class="file-json-preview">${JSON.stringify(file.basic_stats, null, 2)}</pre>`
             : '<span class="text-muted">No basic stats</span>'
@@ -255,17 +418,22 @@ function renderFiles() {
             `
             : ''
 
-        return `
+                return `
             <div class="list-item">
                 <div class="list-item-info">
                     <div class="list-item-name">
+                        <span class="file-type-icon" title="${escapeHtml(docLabel)}" style="margin-right: 4px;">
+                            ${docIcon}
+                        </span>
                         ${file.filename}
                         <span class="badge ${statusBadgeClass}" style="margin-left: 8px;">
                             ${status}
                         </span>
                     </div>
                     <div class="list-item-meta">
-                        File ID: ${file.id ?? '–'} | TUS ID: ${file.tus_id}
+                        File ID: ${file.id ?? '–'} | TUS ID: ${file.tus_id} |
+                        Type: ${escapeHtml(docTypeLabel)} |
+                        Format: ${escapeHtml(formatDisplay)}
                     </div>
                     <div class="list-item-meta">
                         School: ${school ? school.name : 'Unknown'}${region ? ` (Region: ${region.name})` : ''} |
@@ -444,6 +612,8 @@ function setupForms() {
     const schoolForm = document.getElementById('school-form')
     const filesRegionFilter = document.getElementById('files-region-filter')
     const filesSchoolFilter = document.getElementById('files-school-filter')
+    const filesDocTypeFilter = document.getElementById('files-doc-type-filter')
+    const filesFormatFilter = document.getElementById('files-format-filter')
     const filesPageSizeSelect = document.getElementById('files-page-size')
 
     regionForm?.addEventListener('submit', async (e) => {
@@ -474,6 +644,14 @@ function setupForms() {
         renderFiles()
     })
     filesSchoolFilter?.addEventListener('change', () => {
+        filePagination.page = 1
+        renderFiles()
+    })
+    filesDocTypeFilter?.addEventListener('change', () => {
+        filePagination.page = 1
+        renderFiles()
+    })
+    filesFormatFilter?.addEventListener('change', () => {
         filePagination.page = 1
         renderFiles()
     })
