@@ -45,3 +45,10 @@ class FileMeta(SQLModel, table=True):
     )
 
     transcript_text: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})
+
+    # normalized LLM output for easier querying
+    analysis_summary_text: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})
+    analysis_type: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})
+    attendance_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    feedback_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    record_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))

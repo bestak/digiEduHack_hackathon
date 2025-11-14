@@ -1,6 +1,7 @@
 import os
 import math
-from typing import Dict, Any, Optional
+from datetime import datetime
+from typing import Dict, Any, Optional, Literal, Sequence, Tuple
 
 from sqlmodel import Session
 
@@ -8,6 +9,49 @@ from .models import FileMeta
 from .ollama_client import ask_llm  # helper for calling ollama
 
 UPLOAD_DIR = "/data/uploads"  # or whatever tusd uses inside /data
+
+FieldType = Literal["list", "string", "date"]
+FieldSchema = Sequence[Tuple[str, FieldType]]
+
+ATTENDANCE_SCHEMA: FieldSchema = [
+    ("school_year", "list"),
+    ("date", "date"),
+    ("year", "list"),
+    ("month", "list"),
+    ("semester", "list"),
+    ("intervention", "list"),
+    ("intervention_type", "list"),
+    ("intervention_detail", "string"),
+    ("target_group", "list"),
+    ("participant_name", "string"),
+    ("organization_school", "list"),
+    ("school_grade", "list"),
+    ("school_type", "list"),
+    ("region", "list"),
+    ("feedback", "string"),
+]
+
+FEEDBACK_SCHEMA: FieldSchema = [
+    ("school_year", "list"),
+    ("date", "date"),
+    ("year", "list"),
+    ("month", "list"),
+    ("semester", "list"),
+    ("participant_name", "string"),
+    ("organization_school", "list"),
+    ("school_grade", "list"),
+    ("school_type", "list"),
+    ("region", "list"),
+    ("intervention", "list"),
+    ("intervention_type", "list"),
+    ("intervention_detail", "string"),
+    ("target_group", "list"),
+    ("overall_satisfaction", "list"),
+    ("lecturer_performance_and_skills", "list"),
+    ("planned_goals", "list"),
+    ("gained_professional_development", "list"),
+    ("open_feedback", "string"),
+]
 
 def extract_text_from_file(path: str) -> str:
     # Very rough sketch, you can branch by extension
@@ -152,6 +196,128 @@ Document content (possibly truncated):
 \"\"\"{sample}\"\"\"
 """
 
+def _is_empty_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    if isinstance(value, (list, dict)):
+        return len(value) == 0
+    return False
+
+
+def _clean_to_string(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value).strip() or None
+
+
+def _normalize_list(value: Any) -> Optional[list[Any]]:
+    if isinstance(value, list):
+        normalized = []
+        for item in value:
+            cleaned = _clean_to_string(item)
+            if cleaned is not None:
+                normalized.append(cleaned)
+        return normalized or None
+
+    cleaned = _clean_to_string(value)
+    if cleaned is None:
+        return None
+    return [cleaned]
+
+
+def _normalize_date(value: Any) -> Optional[str]:
+    cleaned = _clean_to_string(value)
+    if not cleaned:
+        return None
+
+    known_formats = ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y", "%d/%m/%Y", "%d/%m/%y")
+    for fmt in known_formats:
+        try:
+            parsed = datetime.strptime(cleaned, fmt)
+            return parsed.date().isoformat()
+        except ValueError:
+            continue
+    return cleaned
+
+
+def _normalize_field_value(value: Any, field_type: FieldType) -> Optional[Any]:
+    if field_type == "list":
+        return _normalize_list(value)
+    if field_type == "date":
+        return _normalize_date(value)
+    return _clean_to_string(value)
+
+
+def _extract_expected_fields(data: Dict[str, Any], schema: FieldSchema) -> Optional[Dict[str, Any]]:
+    payload: Dict[str, Any] = {}
+    for field, field_type in schema:
+        if field not in data:
+            continue
+        normalized = _normalize_field_value(data[field], field_type)
+        if normalized is not None:
+            payload[field] = normalized
+    return payload or None
+
+
+def _extract_record_payload(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    payload: Dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "type":
+            continue
+        if _is_empty_value(value):
+            continue
+        payload[key] = value
+    return payload or None
+
+
+def apply_structured_metadata(file_meta: FileMeta, llm_json: Dict[str, Any]) -> None:
+    file_meta.analysis_summary_text = None
+    file_meta.analysis_type = None
+    file_meta.attendance_data = None
+    file_meta.feedback_data = None
+    file_meta.record_data = None
+
+    if not isinstance(llm_json, dict):
+        return
+
+    summary = llm_json.get("summary")
+    if isinstance(summary, str):
+        cleaned_summary = summary.strip()
+        file_meta.analysis_summary_text = cleaned_summary or None
+
+    data = llm_json.get("data")
+    if not isinstance(data, dict):
+        return
+
+    declared_type = data.get("type") if isinstance(data.get("type"), str) else None
+    recognized_type = declared_type if declared_type in {"attendance_checklist", "feedback_form", "record"} else None
+
+    if recognized_type == "attendance_checklist":
+        file_meta.attendance_data = _extract_expected_fields(data, ATTENDANCE_SCHEMA)
+        file_meta.analysis_type = recognized_type
+        return
+
+    if recognized_type == "feedback_form":
+        file_meta.feedback_data = _extract_expected_fields(data, FEEDBACK_SCHEMA)
+        file_meta.analysis_type = recognized_type
+        return
+
+    record_payload = _extract_record_payload(data)
+    if record_payload:
+        file_meta.record_data = record_payload
+        file_meta.analysis_type = recognized_type or "record"
+    elif recognized_type:
+        file_meta.analysis_type = recognized_type
+
 def analyze_file(
     session: Session,
     file_meta: FileMeta,
@@ -180,5 +346,6 @@ def analyze_file(
     file_meta.extracted_text = text  # optional, maybe store only if small
     file_meta.basic_stats = basic_stats
     file_meta.llm_summary = llm_json
+    apply_structured_metadata(file_meta, llm_json)
 
     session.add(file_meta)

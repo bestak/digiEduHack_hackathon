@@ -3,6 +3,7 @@
 import { regionsApi, schoolsApi, filesApi } from './api.js'
 import { config } from './config.js'
 
+const DEFAULT_SCHOOLS_PAGE_SIZE = 10
 const DEFAULT_FILES_PAGE_SIZE = 10
 const UNKNOWN_DOCUMENT_TYPE_VALUE = '__unknown__'
 
@@ -36,6 +37,11 @@ const DEFAULT_FILE_FORMAT = {
 let regions = []
 let schools = []
 let files = []
+
+const schoolPagination = {
+    page: 1,
+    pageSize: DEFAULT_SCHOOLS_PAGE_SIZE
+}
 
 const filePagination = {
     page: 1,
@@ -74,6 +80,7 @@ async function loadData() {
         regions = regionData
         schools = schoolData
         files = fileData
+        schoolPagination.page = 1
         filePagination.page = 1
 
         renderRegions()
@@ -138,10 +145,29 @@ function renderSchools() {
             ? 'No schools found for the selected region'
             : 'No schools created yet'
         container.innerHTML = `<div class="empty-state">${emptyMessage}</div>`
+        renderSchoolPagination({ totalItems: 0, totalPages: 0, start: 0, end: 0 })
         return
     }
 
-    container.innerHTML = schoolsToRender.map(school => {
+    const safePageSize = Math.max(1, Number(schoolPagination.pageSize) || DEFAULT_SCHOOLS_PAGE_SIZE)
+    if (safePageSize !== schoolPagination.pageSize) {
+        schoolPagination.pageSize = safePageSize
+    }
+
+    const totalItems = schoolsToRender.length
+    const totalPages = Math.max(Math.ceil(totalItems / safePageSize), 1)
+    if (schoolPagination.page > totalPages) {
+        schoolPagination.page = totalPages
+    }
+
+    const currentPage = Math.max(schoolPagination.page, 1)
+    schoolPagination.page = currentPage
+
+    const startIndex = (currentPage - 1) * safePageSize
+    const paginatedSchools = schoolsToRender.slice(startIndex, startIndex + safePageSize)
+    const endIndex = startIndex + paginatedSchools.length
+
+    container.innerHTML = paginatedSchools.map(school => {
         const region = regions.find(r => r.id === school.region_id)
         return `
             <div class="list-item">
@@ -157,6 +183,58 @@ function renderSchools() {
             </div>
         `
     }).join('')
+
+    renderSchoolPagination({
+        totalItems,
+        totalPages,
+        start: startIndex + 1,
+        end: endIndex
+    })
+}
+
+function renderSchoolPagination({ totalItems, totalPages, start, end }) {
+    const container = document.getElementById('schools-pagination')
+    if (!container) return
+
+    if (!totalItems) {
+        container.innerHTML = ''
+        return
+    }
+
+    const pageCount = Math.max(totalPages, 1)
+    const currentPage = Math.min(Math.max(schoolPagination.page, 1), pageCount)
+    const rangeStart = Math.min(start, totalItems)
+    const rangeEnd = Math.min(end, totalItems)
+    const prevDisabled = currentPage <= 1
+    const nextDisabled = currentPage >= pageCount
+
+    container.innerHTML = `
+        <div class="pagination-info">Showing ${rangeStart}-${rangeEnd} of ${totalItems}</div>
+        <div class="pagination-controls">
+            <button type="button" class="btn btn-secondary" data-action="prev" ${prevDisabled ? 'disabled' : ''}>
+                Previous
+            </button>
+            <div class="pagination-page">Page ${currentPage} / ${pageCount}</div>
+            <button type="button" class="btn btn-secondary" data-action="next" ${nextDisabled ? 'disabled' : ''}>
+                Next
+            </button>
+        </div>
+    `
+
+    container.querySelector('[data-action="prev"]')?.addEventListener('click', () => {
+        if (schoolPagination.page > 1) {
+            schoolPagination.page -= 1
+            renderSchools()
+        }
+    })
+
+    container.querySelector('[data-action="next"]')?.addEventListener('click', () => {
+        const maxPage = Math.max(pageCount, 1)
+        if (schoolPagination.page < maxPage) {
+            schoolPagination.page += 1
+            renderSchools()
+        }
+    })
 }
 
 function renderRegionSelects() {
@@ -625,6 +703,7 @@ function setupForms() {
     const regionForm = document.getElementById('region-form')
     const schoolForm = document.getElementById('school-form')
     const schoolsRegionFilter = document.getElementById('schools-region-filter')
+    const schoolsPageSizeSelect = document.getElementById('schools-page-size')
     const filesRegionFilter = document.getElementById('files-region-filter')
     const filesSchoolFilter = document.getElementById('files-school-filter')
     const filesDocTypeFilter = document.getElementById('files-doc-type-filter')
@@ -641,6 +720,7 @@ function setupForms() {
         nameInput.value = ''
     })
     schoolsRegionFilter?.addEventListener('change', () => {
+        schoolPagination.page = 1
         renderSchools()
     })
 
@@ -692,6 +772,22 @@ function setupForms() {
                 : DEFAULT_FILES_PAGE_SIZE
             filePagination.page = 1
             renderFiles()
+        })
+    }
+
+    if (schoolsPageSizeSelect) {
+        const parsedValue = Number(schoolsPageSizeSelect.value)
+        if (!Number.isNaN(parsedValue) && parsedValue > 0) {
+            schoolPagination.pageSize = parsedValue
+        }
+
+        schoolsPageSizeSelect.addEventListener('change', (event) => {
+            const newSize = Number(event.target.value)
+            schoolPagination.pageSize = !Number.isNaN(newSize) && newSize > 0
+                ? newSize
+                : DEFAULT_SCHOOLS_PAGE_SIZE
+            schoolPagination.page = 1
+            renderSchools()
         })
     }
 }
