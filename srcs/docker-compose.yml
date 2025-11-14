@@ -63,7 +63,7 @@ services:
 
   frontend:
     build:
-      context: ./eduzmena-frontend/components/file-upload
+      context: ./eduzmena-frontend
     depends_on:
       - backend
       - tusd
@@ -73,22 +73,20 @@ services:
     ports:
       - "4173:4173"
 
-  worker:
-    build:
-      context: ./backend
-    depends_on:
-      - ollama
-      - tusd
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
-      - OLLAMA_HOST=http://ollama:11434
-      # - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:1.5b}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
-      - DATABASE_URL=sqlite:////data/app.db
+      - MB_DB_TYPE=h2
+      - MB_DB_FILE=/metabase-data/metabase.db
     volumes:
-      - ./data:/data
-    command: ["python", "-m", "app.worker"]
+      - metabase_data:/metabase-data
 
 volumes:
   ollama_data:
+    driver: local
+  metabase_data:
     driver: local
