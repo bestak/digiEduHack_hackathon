@@ -1,23 +1,10 @@
 // Chatbot WebSocket client with JSON response processing
 
-// Configuration
 const CONFIG = {
-    wsUrl: "ws://localhost:8000/ws/chat",
-    // JSON response field paths to extract (tried in order)
-    responseFields: [
-        "response",      // e.g., { response: "..." }
-        "message",       // e.g., { message: "..." }
-        "text",          // e.g., { text: "..." }
-        "content",       // e.g., { content: "..." }
-        "data.response", // e.g., { data: { response: "..." } }
-        "data.message",  // e.g., { data: { message: "..." } }
-        "result",        // e.g., { result: "..." }
-        "answer"         // e.g., { answer: "..." }
-    ],
-    // Field to extract error messages from
-    errorFields: ["error", "error_message", "errorMessage", "message"],
-    // Show connection status
-    showStatus: true
+    wsUrl: "http://localhost:8000/chat",
+    // Fields to extract from JSON response (tried in order)
+    responseFields: ["response", "message", "text", "content", "data.response", "data.message", "result", "answer"],
+    errorFields: ["error", "error_message", "errorMessage", "message"]
 };
 
 const chatWindow = document.getElementById("chat-window");
@@ -27,259 +14,144 @@ const sendBtn = document.getElementById("send-btn");
 let socket = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
-const reconnectDelay = 3000;
 
 /**
- * Extract value from nested object using dot notation path
- * @param {Object} obj - Object to extract from
- * @param {string} path - Dot notation path (e.g., "data.message")
- * @returns {*} Extracted value or null
+ * Get value from object using dot notation path
  */
-function extractNestedValue(obj, path) {
-    const keys = path.split('.');
-    let value = obj;
-    
-    for (const key of keys) {
-        if (value && typeof value === 'object' && key in value) {
-            value = value[key];
-        } else {
-            return null;
-        }
-    }
-    
-    return value;
+function getValue(obj, path) {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
 }
 
 /**
- * Extract response text from JSON object
- * @param {Object} jsonData - Parsed JSON object
- * @returns {string|null} Extracted response text or null
+ * Extract response text from JSON
  */
-function extractResponse(jsonData) {
-    // Try each configured field path
+function extractResponse(json) {
+    // Try each field
     for (const field of CONFIG.responseFields) {
-        const value = extractNestedValue(jsonData, field);
-        if (value !== null && value !== undefined) {
-            // Convert to string if needed
-            if (typeof value === 'string') {
-                return value;
-            } else if (typeof value === 'object') {
-                // If it's an object, try to stringify or extract further
-                return JSON.stringify(value, null, 2);
-            } else {
-                return String(value);
-            }
+        const value = getValue(json, field);
+        if (value != null) {
+            return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
         }
     }
-    
-    // If no field matched, return the whole object as string
-    return JSON.stringify(jsonData, null, 2);
+    // Fallback: return whole object as JSON
+    return JSON.stringify(json, null, 2);
 }
 
 /**
- * Extract error message from JSON object
- * @param {Object} jsonData - Parsed JSON object
- * @returns {string|null} Error message or null
+ * Extract error message from JSON
  */
-function extractError(jsonData) {
+function extractError(json) {
     for (const field of CONFIG.errorFields) {
-        const value = extractNestedValue(jsonData, field);
-        if (value !== null && value !== undefined) {
-            return String(value);
-        }
+        const value = getValue(json, field);
+        if (value != null) return String(value);
     }
     return "An error occurred";
 }
 
 /**
  * Process WebSocket message
- * @param {string|Object} data - Raw message data
- * @returns {Object} Processed message with type and content
  */
 function processMessage(data) {
-    // Try to parse as JSON
-    let jsonData;
     try {
-        jsonData = typeof data === 'string' ? JSON.parse(data) : data;
+        const json = typeof data === 'string' ? JSON.parse(data) : data;
+        
+        // Check for errors
+        if (json.error || json.status === 'error' || json.type === 'error') {
+            return { type: 'error', content: extractError(json) };
+        }
+        
+        // Extract response
+        return { type: 'message', content: extractResponse(json) };
     } catch (e) {
         // Not JSON, return as plain text
-        return {
-            type: 'message',
-            content: String(data),
-            raw: data
-        };
+        return { type: 'message', content: String(data) };
     }
-
-    // Check if it's an error
-    if (jsonData.error || jsonData.status === 'error' || jsonData.type === 'error') {
-        return {
-            type: 'error',
-            content: extractError(jsonData),
-            raw: jsonData
-        };
-    }
-
-    // Extract response content
-    const content = extractResponse(jsonData);
-    
-    return {
-        type: jsonData.type || 'message',
-        content: content,
-        raw: jsonData
-    };
 }
 
 /**
- * Append message to chat window
- * @param {string} text - Message text
- * @param {string} sender - Sender type ('user' or 'bot')
- * @param {string} type - Message type ('message', 'error', 'system')
+ * Add message to chat window
  */
-function appendMessage(text, sender, type = 'message') {
+function appendMessage(text, sender, isError = false) {
     const div = document.createElement("div");
-    div.classList.add("message", sender);
-    
-    if (type === 'error') {
-        div.classList.add("error");
-    }
-    
-    // Escape HTML to prevent XSS
-    const textNode = document.createTextNode(text);
-    div.appendChild(textNode);
-    
+    div.className = `message ${sender}${isError ? ' error' : ''}`;
+    div.textContent = text;
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
 /**
- * Update connection status
- * @param {string} status - Status text
- * @param {string} type - Status type ('connected', 'disconnected', 'connecting', 'error')
+ * Show connection status
  */
-function updateStatus(status, type = 'info') {
-    if (!CONFIG.showStatus) return;
-    
-    // Remove existing status messages
-    const existingStatus = chatWindow.querySelector('.status-message');
-    if (existingStatus) {
-        existingStatus.remove();
-    }
-    
-    const statusDiv = document.createElement("div");
-    statusDiv.classList.add("message", "system", "status-message");
-    statusDiv.textContent = `[${status}]`;
-    chatWindow.appendChild(statusDiv);
+function showStatus(text) {
+    const div = document.createElement("div");
+    div.className = "message system status-message";
+    div.textContent = `[${text}]`;
+    chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
 /**
- * Connect to WebSocket server
+ * Connect to WebSocket
  */
 function connect() {
     try {
         socket = new WebSocket(CONFIG.wsUrl);
 
         socket.onopen = () => {
-            console.log("Connected to WebSocket server");
+            console.log("Connected");
             reconnectAttempts = 0;
-            updateStatus("Connected", "connected");
+            showStatus("Connected");
         };
 
-        socket.onerror = (err) => {
-            console.error("WebSocket error:", err);
-            updateStatus("Connection error", "error");
-        };
+        socket.onerror = () => showStatus("Connection error");
 
         socket.onclose = () => {
-            console.log("WebSocket disconnected");
-            updateStatus("Disconnected", "disconnected");
-            
-            // Attempt to reconnect
+            showStatus("Disconnected");
             if (reconnectAttempts < maxReconnectAttempts) {
                 reconnectAttempts++;
                 setTimeout(() => {
-                    console.log(`Reconnecting... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
-                    updateStatus(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`, "connecting");
+                    showStatus(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`);
                     connect();
-                }, reconnectDelay);
+                }, 3000);
             } else {
-                updateStatus("Connection failed. Please refresh the page.", "error");
+                showStatus("Connection failed. Please refresh.");
             }
         };
 
         socket.onmessage = (event) => {
-            try {
-                const processed = processMessage(event.data);
-                
-                if (processed.type === 'error') {
-                    appendMessage(processed.content, "bot", "error");
-                } else {
-                    appendMessage(processed.content, "bot", processed.type);
-                }
-            } catch (error) {
-                console.error("Error processing message:", error);
-                appendMessage("Error processing response", "bot", "error");
-            }
+            const processed = processMessage(event.data);
+            appendMessage(processed.content, "bot", processed.type === 'error');
         };
     } catch (error) {
-        console.error("Error connecting to WebSocket:", error);
-        updateStatus("Connection failed", "error");
+        console.error("Connection error:", error);
+        showStatus("Connection failed");
     }
 }
 
 /**
- * Send message to WebSocket server
+ * Send message
  */
 function sendMessage() {
     const text = chatInput.value.trim();
-    if (!text) return;
-    
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-        appendMessage("Not connected to server. Please wait...", "system", "error");
-        return;
-    }
+    if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
 
-    // Send message (can be plain text or JSON)
-    try {
-        // Option 1: Send as plain text
-        socket.send(text);
-        
-        // Option 2: Send as JSON (uncomment if your backend expects JSON)
-        // socket.send(JSON.stringify({ message: text, type: "user_message" }));
-        
-        appendMessage(text, "user");
-        chatInput.value = "";
-    } catch (error) {
-        console.error("Error sending message:", error);
-        appendMessage("Error sending message", "system", "error");
-    }
+    socket.send(text);
+    appendMessage(text, "user");
+    chatInput.value = "";
+    
+    // Remove status on first message
+    const status = chatWindow.querySelector('.status-message');
+    if (status) status.remove();
 }
 
 // Initialize
 if (chatWindow && chatInput && sendBtn) {
-    // Connect to WebSocket
     connect();
-    
-    // Track if first message sent
-    let firstMessage = true;
-    
-    // Wrapper function to clear status on first message
-    function handleSendMessage() {
-        if (firstMessage) {
-            const statusMsg = chatWindow.querySelector('.status-message');
-            if (statusMsg) statusMsg.remove();
-            firstMessage = false;
-        }
-        sendMessage();
-    }
-    
-    // Event listeners
-    sendBtn.addEventListener("click", handleSendMessage);
-    
+    sendBtn.addEventListener("click", sendMessage);
     chatInput.addEventListener("keypress", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            handleSendMessage();
+            sendMessage();
         }
     });
 } else {
