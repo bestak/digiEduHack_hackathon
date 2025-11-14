@@ -17,6 +17,7 @@ const maxReconnectAttempts = 5;
 let currentBotMessage = null; // Current bot message element being streamed to
 let currentRole = null; // Track current role to detect role changes
 let thinkingMessage = null; // "Thinking..." message element
+let thinkingInterval = null; // Interval for animating thinking dots
 
 /**
  * Get value from object using dot notation path
@@ -91,14 +92,20 @@ function appendMessage(text, sender, isError = false) {
 }
 
 /**
- * Show "Thinking..." message
+ * Show "Thinking..." message with animated dots
  */
 function showThinking() {
     if (!thinkingMessage) {
         thinkingMessage = createMessageElement("bot");
-        thinkingMessage.textContent = "Thinking...";
         thinkingMessage.style.opacity = "0.6";
         thinkingMessage.style.fontStyle = "italic";
+        
+        // Start animated dots
+        let dotCount = 0;
+        thinkingInterval = setInterval(() => {
+            dotCount = (dotCount % 3) + 1; // Cycle through 1, 2, 3
+            thinkingMessage.textContent = "Přemýšlím" + ".".repeat(dotCount);
+        }, 500); // Update every 500ms
     }
 }
 
@@ -106,6 +113,10 @@ function showThinking() {
  * Remove "Thinking..." message
  */
 function removeThinking() {
+    if (thinkingInterval) {
+        clearInterval(thinkingInterval);
+        thinkingInterval = null;
+    }
     if (thinkingMessage) {
         thinkingMessage.remove();
         thinkingMessage = null;
@@ -136,8 +147,8 @@ function appendToStreamingMessage(text, role = null, sender = "bot") {
     // Handle tools role specially
     if (role === "tools") {
         // Don't append the dump, just show that it looked through local data
-        if (!currentBotMessage.textContent.includes("Looking through local data")) {
-            currentBotMessage.textContent = "Looking through local data...";
+        if (!currentBotMessage.textContent.includes("Prohlížím lokální data")) {
+            currentBotMessage.textContent = "Prohlížím lokální data...";
         }
     } else {
         // Append text normally
