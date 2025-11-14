@@ -101,7 +101,6 @@ services:
     volumes:
       - metabase_data:/metabase-data
 
-
 volumes:
   ollama_data:
     driver: local
