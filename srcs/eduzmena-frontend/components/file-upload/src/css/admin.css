@@ -119,7 +119,8 @@
     padding: 8px;
 }
 
-.files-pagination {
+.files-pagination,
+.schools-pagination {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -128,18 +129,21 @@
     gap: var(--spacing-md);
 }
 
-.files-pagination .pagination-info {
+.files-pagination .pagination-info,
+.schools-pagination .pagination-info {
     font-size: var(--font-size-sm);
     color: var(--color-muted);
 }
 
-.files-pagination .pagination-controls {
+.files-pagination .pagination-controls,
+.schools-pagination .pagination-controls {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
 }
 
-.files-pagination .pagination-controls .pagination-page {
+.files-pagination .pagination-controls .pagination-page,
+.schools-pagination .pagination-controls .pagination-page {
     font-size: var(--font-size-sm);
     color: var(--color-text);
 }
