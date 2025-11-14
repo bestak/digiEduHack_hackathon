@@ -27,16 +27,9 @@ class RAG:
         self.vector_store = Chroma(
             collection_name="example_collection",
             embedding_function=self.embeddings,
-            persist_directory="/app/src/chromdb_dir"
-
-            # client=chromadb.HttpClient(host="http://localhost:8000"),
-            # client_settings=chromadb.Settings(chroma_api_impl="chromadb.api.fastapi.FastAPI")
+            client=chromadb.HttpClient(host="http://chromadb:8000"),
+            client_settings=chromadb.Settings(chroma_api_impl="chromadb.api.fastapi.FastAPI")
         )
-        # self.vector_store = Chroma(
-        #     collection_name="example_collection",
-        #     embedding_function=self.embeddings,
-        #     persist_directory="./chroma_langchain_db",  # Where to save data locally, remove if not necessary
-        # )
         print(f"Current documents in ChromaDb: # {self.vector_store._collection.count()}")
 
     def add_document(self, path: str):
