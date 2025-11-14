@@ -41,8 +41,9 @@ async function loadData() {
         files = fileData
 
         renderRegions()
+        renderRegionSelects()
+        renderSchoolFilterSelect()
         renderSchools()
-        renderRegionSelect()
         renderFiles()
     } catch (error) {
         console.error('Failed to load admin data:', error)
@@ -87,13 +88,14 @@ function renderRegions() {
 
 function renderSchools() {
     const container = document.getElementById('schools-list')
+    const schoolsToRender = schools
 
-    if (!schools.length) {
+    if (!schoolsToRender.length) {
         container.innerHTML = '<div class="empty-state">No schools created yet</div>'
         return
     }
 
-    container.innerHTML = schools.map(school => {
+    container.innerHTML = schoolsToRender.map(school => {
         const region = regions.find(r => r.id === school.region_id)
         return `
             <div class="list-item">
@@ -111,28 +113,88 @@ function renderSchools() {
     }).join('')
 }
 
-function renderRegionSelect() {
-    const select = document.getElementById('school-region')
+function renderRegionSelects() {
+    const configs = [
+        { id: 'school-region', placeholder: 'Select a region' },
+        { id: 'files-region-filter', placeholder: 'All regions' }
+    ]
+
+    configs.forEach(({ id, placeholder }) => {
+        const select = document.getElementById(id)
+        if (!select) return
+
+        const prevValue = select.value
+        select.innerHTML = ''
+
+        const defaultOption = document.createElement('option')
+        defaultOption.value = ''
+        defaultOption.textContent = placeholder
+        select.appendChild(defaultOption)
+
+        regions.forEach(region => {
+            const option = document.createElement('option')
+            option.value = String(region.id)
+            option.textContent = region.name
+            select.appendChild(option)
+        })
+
+        const optionExists = regions.some(region => String(region.id) === prevValue)
+        if (prevValue && optionExists) {
+            select.value = prevValue
+        }
+    })
+}
+
+function renderSchoolFilterSelect() {
+    const select = document.getElementById('files-school-filter')
     if (!select) return
-    select.innerHTML = '<option value="">Select a region</option>'
-    regions.forEach(region => {
+
+    const regionFilter = document.getElementById('files-region-filter')?.value || ''
+    const prevValue = select.value
+    select.innerHTML = '<option value="">All schools</option>'
+
+    const availableSchools = regionFilter
+        ? schools.filter(s => String(s.region_id) === regionFilter)
+        : schools
+
+    availableSchools.forEach(school => {
         const option = document.createElement('option')
-        option.value = region.id
-        option.textContent = region.name
+        option.value = String(school.id)
+        option.textContent = school.name
         select.appendChild(option)
     })
+
+    const optionExists = availableSchools.some(s => String(s.id) === prevValue)
+    select.value = optionExists ? prevValue : ''
 }
 
 function renderFiles() {
     const container = document.getElementById('files-list')
     if (!container) return
 
-    if (!files.length) {
-        container.innerHTML = '<div class="empty-state">No files uploaded yet</div>'
+    const regionFilter = document.getElementById('files-region-filter')?.value || ''
+    const schoolFilter = document.getElementById('files-school-filter')?.value || ''
+
+    const filteredFiles = files.filter(file => {
+        const school = schools.find(s => s.id === file.school_id)
+        const matchesRegion = regionFilter
+            ? school && String(school.region_id) === regionFilter
+            : true
+        const matchesSchool = schoolFilter
+            ? String(file.school_id) === schoolFilter
+            : true
+        return matchesRegion && matchesSchool
+    })
+
+    if (!filteredFiles.length) {
+        const emptyMessage = schoolFilter
+            ? 'No files found for the selected school'
+            : 'No files uploaded yet'
+        container.innerHTML = `<div class="empty-state">${emptyMessage}</div>`
         return
     }
 
-    container.innerHTML = files.map(file => {
+    container.innerHTML = filteredFiles.map(file => {
         const school = schools.find(s => s.id === file.school_id)
         const region = school ? regions.find(r => r.id === school.region_id) : null
 
@@ -302,6 +364,8 @@ async function deleteSchool(id) {
 function setupForms() {
     const regionForm = document.getElementById('region-form')
     const schoolForm = document.getElementById('school-form')
+    const filesRegionFilter = document.getElementById('files-region-filter')
+    const filesSchoolFilter = document.getElementById('files-school-filter')
 
     regionForm?.addEventListener('submit', async (e) => {
         e.preventDefault()
@@ -323,6 +387,13 @@ function setupForms() {
         nameInput.value = ''
         regionSelect.value = ''
     })
+
+    filesRegionFilter?.addEventListener('change', () => {
+        renderSchoolFilterSelect()
+        renderSchools()
+        renderFiles()
+    })
+    filesSchoolFilter?.addEventListener('change', () => renderFiles())
 }
 
 window.deleteRegion = deleteRegion
