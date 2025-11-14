@@ -1,6 +1,7 @@
 // Admin panel logic backed by the real API
 
 import { regionsApi, schoolsApi, filesApi } from './api.js'
+import { config } from './config.js'
 
 let regions = []
 let schools = []
@@ -139,7 +140,6 @@ function renderFiles() {
             failed: 'badge-danger',
         }[status] || 'badge-secondary'
 
-        // Optional: compact preview of basic_stats and llm_summary
         const basicStatsPreview = file.basic_stats
             ? `<pre class="file-json-preview">${JSON.stringify(file.basic_stats, null, 2)}</pre>`
             : '<span class="text-muted">No basic stats</span>'
@@ -183,9 +183,26 @@ function renderFiles() {
                         ${llmSummaryPreview}
                     </details>
                 </div>
+                <div class="list-item-actions">
+                    <button class="btn btn-secondary" onclick="previewFile('${file.id}')">
+                        Preview
+                    </button>
+                </div>
             </div>
         `
     }).join('')
+}
+
+function previewFile(id) {
+    const numericId = Number(id)
+    const file = files.find(f => f.id === numericId || f.id === id)
+    if (!file) return
+
+    // Base tus endpoint, same as Uppy uses for uploads
+    const base = config.tusEndpoint.replace(/\/$/, '')   // strip trailing /
+    const url = `${base}/${file.tus_id}`                 // e.g. http://localhost:1080/files/<id>
+
+    window.open(url, '_blank')
 }
 
 async function addRegion(name) {
@@ -274,6 +291,7 @@ function setupForms() {
 window.deleteRegion = deleteRegion
 window.deleteSchool = deleteSchool
 window.refreshFiles = () => loadData()
+window.previewFile = previewFile
 
 async function init() {
     setupForms()
