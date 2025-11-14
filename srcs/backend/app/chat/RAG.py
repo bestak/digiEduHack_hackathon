@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import anyio
@@ -14,6 +15,7 @@ from langchain_chroma import Chroma
 from langchain.tools import tool
 
 from .prompts import agent_system_prompt
+from ..models import School
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
@@ -64,15 +66,22 @@ class RAG:
         loader = loader_cls(path)
         return loader.load()
 
-    def add_document(self, path: str, filename: str):
+    def add_document(self, path: str, filename: str, school: School, uploaded_at: datetime):
         print(f"Adding document: {path}")
         docs = self.load_any_document(path, filename)
         if docs is None:
             print("Error, not supported file type")
             return None
         assert len(docs) == 1
-        print(docs[0].metadata)
-        print(f"Total characters: {len(docs[0].page_content)}")
+        doc = docs[0]
+        doc.metadata.update({
+            "timestamp": uploaded_at.isoformat(),
+            "filename": filename,
+            "school_name": school.name,
+            "region_name": school.region.name,
+        })
+        print(doc.metadata)
+        print(f"Total characters: {len(doc.page_content)}")
 
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,  # chunk size (characters)
@@ -81,9 +90,6 @@ class RAG:
         )
         all_splits = text_splitter.split_documents(docs)
         print(f"Split blog post into {len(all_splits)} sub-documents.")
-
-        # res = self.vector_store.add_documents(documents=all_splits)
-        # print("Added document", res[0])
 
         res = self.vector_store.add_documents(all_splits)
         print(f"Added {len(res)} sub-documents.")

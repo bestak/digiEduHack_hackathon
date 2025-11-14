@@ -33,8 +33,10 @@ def create_file(
     session.commit()
     session.refresh(file_meta)
 
+    school = session.get(School, payload.school_id)
+
     rag = RAG()
-    rag.add_document(f"/data/uploads/{payload.tus_id}", payload.filename)
+    rag.add_document(f"/data/uploads/{payload.tus_id}", payload.filename, school, file_meta.uploaded_at)
 
     return file_meta
 
