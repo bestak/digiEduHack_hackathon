@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import anyio
 import chromadb
 from langchain.agents import create_agent
-from langchain_community.document_loaders import UnstructuredWordDocumentLoader
+from langchain_community.document_loaders import UnstructuredWordDocumentLoader, UnstructuredPDFLoader, \
+    UnstructuredExcelLoader, UnstructuredMarkdownLoader, TextLoader, UnstructuredFileLoader
 from langchain_ollama import ChatOllama
 from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -20,7 +22,8 @@ class ModelResponse:
 class RAG:
     def __init__(self):
         self.llm = ChatOllama(
-            model="llama3.1:8b"
+            model="llama3.1:8b",
+            base_url="http://host.docker.internal:11434"
         )
         self.embeddings = OllamaEmbeddings(model="embeddinggemma", base_url="http://host.docker.internal:11434")
 
@@ -32,10 +35,31 @@ class RAG:
         )
         print(f"Current documents in ChromaDb: # {self.vector_store._collection.count()}")
 
+    def load_any_document(self, path: str):
+        ext = Path(path).suffix.lower()
+
+        loader_map = {
+            ".pdf": UnstructuredPDFLoader,
+            ".docx": UnstructuredWordDocumentLoader,
+            ".doc": UnstructuredWordDocumentLoader,
+            ".xlsx": UnstructuredExcelLoader,
+            ".xls": UnstructuredExcelLoader,
+            ".md": UnstructuredMarkdownLoader,
+            ".txt": TextLoader,
+        }
+
+        loader_cls = loader_map.get(ext)
+        if loader_cls is None:
+            return None
+
+        loader = loader_cls(path)
+        return loader.load()
+
     def add_document(self, path: str):
         print(f"Adding document: {path}")
-        loader = UnstructuredWordDocumentLoader(file_path=path)
-        docs = loader.load()
+        docs = self.load_any_document(path)
+        if docs is None:
+            return None
         assert len(docs) == 1
         print(f"Total characters: {len(docs[0].page_content)}")
 
