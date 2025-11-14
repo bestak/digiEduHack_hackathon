@@ -9,6 +9,46 @@ from .ollama_client import ask_llm  # helper for calling ollama
 
 UPLOAD_DIR = "/data/uploads"  # or whatever tusd uses inside /data
 
+ATTENDANCE_FIELDS = [
+    "school_year",
+    "date",
+    "year",
+    "month",
+    "semester",
+    "intervention",
+    "intervention_type",
+    "intervention_detail",
+    "target_group",
+    "participant_name",
+    "organization_school",
+    "school_grade",
+    "school_type",
+    "region",
+    "feedback",
+]
+
+FEEDBACK_FIELDS = [
+    "school_year",
+    "date",
+    "year",
+    "month",
+    "semester",
+    "participant_name",
+    "organization_school",
+    "school_grade",
+    "school_type",
+    "region",
+    "intervention",
+    "intervention_type",
+    "intervention_detail",
+    "target_group",
+    "overall_satisfaction",
+    "lecturer_performance_and_skills",
+    "planned_goals",
+    "gained_professional_development",
+    "open_feedback",
+]
+
 def extract_text_from_file(path: str) -> str:
     # Very rough sketch, you can branch by extension
     if path.lower().endswith(".pdf"):
@@ -152,6 +192,74 @@ Document content (possibly truncated):
 \"\"\"{sample}\"\"\"
 """
 
+def _is_empty_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    if isinstance(value, (list, dict)):
+        return len(value) == 0
+    return False
+
+
+def _extract_expected_fields(data: Dict[str, Any], fields: list[str]) -> Optional[Dict[str, Any]]:
+    payload: Dict[str, Any] = {}
+    for field in fields:
+        if field in data and not _is_empty_value(data[field]):
+            payload[field] = data[field]
+    return payload or None
+
+
+def _extract_record_payload(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    payload: Dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "type":
+            continue
+        if _is_empty_value(value):
+            continue
+        payload[key] = value
+    return payload or None
+
+
+def apply_structured_metadata(file_meta: FileMeta, llm_json: Dict[str, Any]) -> None:
+    file_meta.analysis_summary_text = None
+    file_meta.analysis_type = None
+    file_meta.attendance_data = None
+    file_meta.feedback_data = None
+    file_meta.record_data = None
+
+    if not isinstance(llm_json, dict):
+        return
+
+    summary = llm_json.get("summary")
+    if isinstance(summary, str):
+        cleaned_summary = summary.strip()
+        file_meta.analysis_summary_text = cleaned_summary or None
+
+    data = llm_json.get("data")
+    if not isinstance(data, dict):
+        return
+
+    declared_type = data.get("type") if isinstance(data.get("type"), str) else None
+    recognized_type = declared_type if declared_type in {"attendance_checklist", "feedback_form", "record"} else None
+
+    if recognized_type == "attendance_checklist":
+        file_meta.attendance_data = _extract_expected_fields(data, ATTENDANCE_FIELDS)
+        file_meta.analysis_type = recognized_type
+        return
+
+    if recognized_type == "feedback_form":
+        file_meta.feedback_data = _extract_expected_fields(data, FEEDBACK_FIELDS)
+        file_meta.analysis_type = recognized_type
+        return
+
+    record_payload = _extract_record_payload(data)
+    if record_payload:
+        file_meta.record_data = record_payload
+        file_meta.analysis_type = recognized_type or "record"
+    elif recognized_type:
+        file_meta.analysis_type = recognized_type
+
 def analyze_file(
     session: Session,
     file_meta: FileMeta,
@@ -180,5 +288,6 @@ def analyze_file(
     file_meta.extracted_text = text  # optional, maybe store only if small
     file_meta.basic_stats = basic_stats
     file_meta.llm_summary = llm_json
+    apply_structured_metadata(file_meta, llm_json)
 
     session.add(file_meta)
